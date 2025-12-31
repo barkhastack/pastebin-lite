@@ -5,12 +5,8 @@ export async function POST(request) {
   const body = await request.json();
   const { content, ttl_seconds, max_views } = body;
 
-  // Validation
   if (!content || typeof content !== "string" || content.trim() === "") {
-    return Response.json(
-      { error: "content is required" },
-      { status: 400 }
-    );
+    return Response.json({ error: "content is required" }, { status: 400 });
   }
 
   if (
