@@ -1,20 +1,39 @@
 import { createClient } from "redis";
 
-const redis = createClient({
-  url: process.env.UPSTASH_REDIS_REDIS_URL,
-});
+let redis;
+let isConnected = false;
 
-redis.connect();
+async function getRedis() {
+  if (!redis) {
+    redis = createClient({
+      url: process.env.UPSTASH_REDIS_REDIS_URL,
+    });
+
+    redis.on("error", (err) => {
+      console.error("Redis Client Error", err);
+    });
+  }
+
+  if (!isConnected) {
+    await redis.connect();
+    isConnected = true;
+  }
+
+  return redis;
+}
 
 export async function savePaste(id, data) {
-  await redis.set(`paste:${id}`, JSON.stringify(data));
+  const client = await getRedis();
+  await client.set(`paste:${id}`, JSON.stringify(data));
 }
 
 export async function getPaste(id) {
-  const value = await redis.get(`paste:${id}`);
+  const client = await getRedis();
+  const value = await client.get(`paste:${id}`);
   return value ? JSON.parse(value) : null;
 }
 
 export async function deletePaste(id) {
-  await redis.del(`paste:${id}`);
+  const client = await getRedis();
+  await client.del(`paste:${id}`);
 }
