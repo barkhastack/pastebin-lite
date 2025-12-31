@@ -1,12 +1,10 @@
-export function GET() {
-  return Response.json({ ok: true });
-}
-import { Redis } from "@upstash/redis";
+import { createClient } from "redis";
 
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+const redis = createClient({
+  url: process.env.UPSTASH_REDIS_REDIS_URL,
 });
+
+redis.connect();
 
 export async function GET() {
   try {

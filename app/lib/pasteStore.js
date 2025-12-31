@@ -1,16 +1,18 @@
-import { Redis } from "@upstash/redis";
+import { createClient } from "redis";
 
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+const redis = createClient({
+  url: process.env.UPSTASH_REDIS_REDIS_URL,
 });
 
+redis.connect();
+
 export async function savePaste(id, data) {
-  await redis.set(`paste:${id}`, data);
+  await redis.set(`paste:${id}`, JSON.stringify(data));
 }
 
 export async function getPaste(id) {
-  return await redis.get(`paste:${id}`);
+  const value = await redis.get(`paste:${id}`);
+  return value ? JSON.parse(value) : null;
 }
 
 export async function deletePaste(id) {
