@@ -1,6 +1,6 @@
 import { getPaste, savePaste, deletePaste } from "@/app/lib/pasteStore";
 
-function getNow(request) {
+function now(request) {
   if (process.env.TEST_MODE === "1") {
     const h = request.headers.get("x-test-now-ms");
     if (h) return Number(h);
@@ -10,24 +10,21 @@ function getNow(request) {
 
 export async function GET(request, { params }) {
   const paste = await getPaste(params.id);
-
   if (!paste) {
-    return Response.json({ error: "Not found" }, { status: 404 });
+    return Response.json({ error: "not found" }, { status: 404 });
   }
 
-  const now = getNow(request);
+  const current = now(request);
 
-  // TTL check
-  if (paste.expiresAt && now > paste.expiresAt) {
+  if (paste.expiresAt && current > paste.expiresAt) {
     await deletePaste(params.id);
-    return Response.json({ error: "Not found" }, { status: 404 });
+    return Response.json({ error: "not found" }, { status: 404 });
   }
 
-  // View limit check
   if (paste.max_views !== null) {
     if (paste.views >= paste.max_views) {
       await deletePaste(params.id);
-      return Response.json({ error: "Not found" }, { status: 404 });
+      return Response.json({ error: "not found" }, { status: 404 });
     }
     paste.views += 1;
     await savePaste(params.id, paste);
