@@ -1,36 +1,46 @@
-import { randomUUID } from "crypto";
-import { savePaste } from "@/app/lib/pasteStore";
+import { getPaste, savePaste, deletePaste } from "@/app/lib/pasteStore";
 
-export async function POST(request) {
-  const body = await request.json();
-  const { content, ttl_seconds, max_views } = body;
+function getNow(request) {
+  if (process.env.TEST_MODE === "1") {
+    const h = request.headers.get("x-test-now-ms");
+    if (h) return Number(h);
+  }
+  return Date.now();
+}
 
-  if (!content || typeof content !== "string" || content.trim() === "") {
-    return Response.json({ error: "Invalid content" }, { status: 400 });
+export async function GET(request, { params }) {
+  const paste = await getPaste(params.id);
+
+  if (!paste) {
+    return Response.json({ error: "Not found" }, { status: 404 });
   }
 
-  if (ttl_seconds !== undefined && (!Number.isInteger(ttl_seconds) || ttl_seconds < 1)) {
-    return Response.json({ error: "Invalid ttl_seconds" }, { status: 400 });
+  const now = getNow(request);
+
+  // TTL check
+  if (paste.expiresAt && now > paste.expiresAt) {
+    await deletePaste(params.id);
+    return Response.json({ error: "Not found" }, { status: 404 });
   }
 
-  if (max_views !== undefined && (!Number.isInteger(max_views) || max_views < 1)) {
-    return Response.json({ error: "Invalid max_views" }, { status: 400 });
+  // View limit check
+  if (paste.max_views !== null) {
+    if (paste.views >= paste.max_views) {
+      await deletePaste(params.id);
+      return Response.json({ error: "Not found" }, { status: 404 });
+    }
+    paste.views += 1;
+    await savePaste(params.id, paste);
   }
 
-  const id = randomUUID();
-  const now = Date.now();
-
-  const paste = {
-    content,
-    max_views: max_views ?? null,
-    views: 0,
-    expiresAt: ttl_seconds ? now + ttl_seconds * 1000 : null,
-  };
-
-  await savePaste(id, paste);
-
-  return Response.json(
-    { id, url: `${request.nextUrl.origin}/p/${id}` },
-    { status: 201 }
-  );
+  return Response.json({
+    content: paste.content,
+    remaining_views:
+      paste.max_views === null
+        ? null
+        : Math.max(paste.max_views - paste.views, 0),
+    expires_at: paste.expiresAt
+      ? new Date(paste.expiresAt).toISOString()
+      : null,
+  });
 }
