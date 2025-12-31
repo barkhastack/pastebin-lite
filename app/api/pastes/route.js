@@ -1,46 +1,66 @@
-import { getPaste, savePaste, deletePaste } from "@/app/lib/pasteStore";
+import { nanoid } from "nanoid";
+import { savePaste } from "@/app/lib/pasteStore";
 
-function getNow(request) {
-  if (process.env.TEST_MODE === "1") {
-    const h = request.headers.get("x-test-now-ms");
-    if (h) return Number(h);
-  }
-  return Date.now();
-}
+export async function POST(request) {
+  try {
+    const body = await request.json();
+    const { content, ttl_seconds, max_views } = body;
 
-export async function GET(request, { params }) {
-  const paste = await getPaste(params.id);
-
-  if (!paste) {
-    return Response.json({ error: "Not found" }, { status: 404 });
-  }
-
-  const now = getNow(request);
-
-  // TTL check
-  if (paste.expiresAt && now > paste.expiresAt) {
-    await deletePaste(params.id);
-    return Response.json({ error: "Not found" }, { status: 404 });
-  }
-
-  // View limit check
-  if (paste.max_views !== null) {
-    if (paste.views >= paste.max_views) {
-      await deletePaste(params.id);
-      return Response.json({ error: "Not found" }, { status: 404 });
+    // Validation
+    if (!content || typeof content !== "string" || content.trim() === "") {
+      return Response.json(
+        { error: "content is required" },
+        { status: 400 }
+      );
     }
-    paste.views += 1;
-    await savePaste(params.id, paste);
-  }
 
-  return Response.json({
-    content: paste.content,
-    remaining_views:
-      paste.max_views === null
-        ? null
-        : Math.max(paste.max_views - paste.views, 0),
-    expires_at: paste.expiresAt
-      ? new Date(paste.expiresAt).toISOString()
-      : null,
-  });
+    if (
+      ttl_seconds !== undefined &&
+      (!Number.isInteger(ttl_seconds) || ttl_seconds < 1)
+    ) {
+      return Response.json(
+        { error: "ttl_seconds must be integer >= 1" },
+        { status: 400 }
+      );
+    }
+
+    if (
+      max_views !== undefined &&
+      (!Number.isInteger(max_views) || max_views < 1)
+    ) {
+      return Response.json(
+        { error: "max_views must be integer >= 1" },
+        { status: 400 }
+      );
+    }
+
+    const id = nanoid(10);
+    const now = Date.now();
+
+    const paste = {
+      content,
+      createdAt: now,
+      expiresAt: ttl_seconds ? now + ttl_seconds * 1000 : null,
+      max_views: max_views ?? null,
+      views: 0,
+    };
+
+    await savePaste(id, paste);
+
+    return Response.json(
+      {
+        id,
+        url: `${process.env.VERCEL_URL
+          ? `https://${process.env.VERCEL_URL}`
+          : ""}/p/${id}`,
+      },
+      { status: 201 }
+    );
+  } catch (e) {
+    console.error(e);
+    return Response.json(
+      { error: "Internal Server Error" },
+      { status: 500 }
+    );
+  }
 }
