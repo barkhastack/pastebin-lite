@@ -10,17 +10,20 @@ function getNow(request) {
 
 export async function GET(request, { params }) {
   const paste = await getPaste(params.id);
+
   if (!paste) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 
   const now = getNow(request);
 
+  // TTL check
   if (paste.expiresAt && now > paste.expiresAt) {
     await deletePaste(params.id);
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 
+  // View limit check
   if (paste.max_views !== null) {
     if (paste.views >= paste.max_views) {
       await deletePaste(params.id);
