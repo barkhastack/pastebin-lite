@@ -1,8 +1,9 @@
 import { getPaste, savePaste, deletePaste } from "@/app/lib/pasteStore";
+import { headers } from "next/headers";
 
-function now(request) {
+function now() {
   if (process.env.TEST_MODE === "1") {
-    const h = request.headers.get("x-test-now-ms");
+    const h = headers().get("x-test-now-ms");
     if (h) return Number(h);
   }
   return Date.now();
@@ -14,17 +15,19 @@ export async function GET(request, { params }) {
     return Response.json({ error: "not found" }, { status: 404 });
   }
 
-  const current = now(request);
+  const currentTime = now();
 
-  if (paste.expiresAt && current > paste.expiresAt) {
+  // TTL check
+  if (paste.expiresAt && currentTime > paste.expiresAt) {
     await deletePaste(params.id);
-    return Response.json({ error: "not found" }, { status: 404 });
+    return Response.json({ error: "expired" }, { status: 404 });
   }
 
+  // View count check
   if (paste.max_views !== null) {
     if (paste.views >= paste.max_views) {
       await deletePaste(params.id);
-      return Response.json({ error: "not found" }, { status: 404 });
+      return Response.json({ error: "view limit exceeded" }, { status: 404 });
     }
     paste.views += 1;
     await savePaste(params.id, paste);
@@ -33,9 +36,7 @@ export async function GET(request, { params }) {
   return Response.json({
     content: paste.content,
     remaining_views:
-      paste.max_views === null
-        ? null
-        : Math.max(paste.max_views - paste.views, 0),
+      paste.max_views === null ? null : paste.max_views - paste.views,
     expires_at: paste.expiresAt
       ? new Date(paste.expiresAt).toISOString()
       : null,
